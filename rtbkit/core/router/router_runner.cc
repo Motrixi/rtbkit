@@ -88,6 +88,8 @@ doOptions(int argc, char ** argv,
          "configuration file with exchange data")
         ("bidder,b", value<string>(&bidderConfigurationFile),
          "configuration file with bidder interface data")
+        ("augmentor,u", value<string>(&augmentorConfigurationFile),
+         "configuration file with augmentor interface data")
         ("log-auctions", value<bool>(&logAuctions)->zero_tokens(),
          "log auction requests")
         ("log-bids", value<bool>(&logBids)->zero_tokens(),
@@ -138,6 +140,7 @@ init()
 
     exchangeConfig = loadJsonFromFile(exchangeConfigurationFile);
     bidderConfig = loadJsonFromFile(bidderConfigurationFile);
+    augmentorConfig = loadJsonFromFile(augmentorConfigurationFile);
 
     const auto amountSlowModeMoneyLimit = Amount::parse(slowModeMoneyLimit);
     const auto maxBidPriceAmount = USD_CPM(maxBidPrice);
@@ -161,6 +164,7 @@ init()
                                       slowModeTimeout, amountSlowModeMoneyLimit);
     router->slowModeTolerance = slowModeTolerance;
     router->initBidderInterface(bidderConfig);
+    router->initAugmentorInterface(augmentorConfig);
     if (analyticsOn) {
         const auto & analyticsUri = proxies->params["analytics-uri"].asString();
         if (!analyticsUri.empty()) {

@@ -222,6 +222,18 @@ initBidderInterface(Json::Value const & json)
 
 void
 Router::
+initAugmentorInterface(Json::Value const & json)
+{
+    /*
+    bidder = BidderInterface::create(
+            serviceName() + ".augmentor", getServices(), json);
+    bidder->init(&bridge, this);
+    bidder->registerLoopMonitor(&loopMonitor);
+    */
+}
+
+void
+Router::
 initAnalytics(const string & baseUrl, const int numConnections)
 {
     analytics.init(baseUrl, numConnections);
@@ -450,6 +462,8 @@ void
 Router::
 sleepUntilIdle()
 {
+    /*XXX NEMI : check if this is still valid code the HTTP interface,
+      doesnt look like this method is called at all*/
     for (int iter = 0;;++iter) {
         augmentationLoop.sleepUntilIdle();
         size_t nonIdle = numNonIdle();

@@ -32,6 +32,7 @@ struct RouterRunner {
 
     std::string exchangeConfigurationFile;
     std::string bidderConfigurationFile;
+    std::string augmentorConfigurationFile;
 
     float lossSeconds;
     bool noPostAuctionLoop;
@@ -64,6 +65,7 @@ struct RouterRunner {
     std::shared_ptr<Router> router;
     Json::Value exchangeConfig;
     Json::Value bidderConfig;
+    Json::Value augmentorConfig;
 
     static Logging::Category print;
     static Logging::Category trace;
