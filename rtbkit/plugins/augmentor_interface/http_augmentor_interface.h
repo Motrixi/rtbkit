@@ -21,11 +21,14 @@ struct HttpAugmentorInterface : public AugmentorInterface
     /** Information about a specific augmentor which belongs to an augmentor class.
      */
     struct AugmentorInstanceInfo {
-        AugmentorInstanceInfo(const std::string& url = "", int maxInFlight = 0) :
-            url(url), numInFlight(0), maxInFlight(maxInFlight)
+        AugmentorInstanceInfo(const std::string& host="127.0.0.1",
+                const std::string& path = "", int maxInFlight = 0) :
+            host(host), path(path), numInFlight(0), maxInFlight(maxInFlight)
         {}
 
-        std::string url;
+        std::string host;
+        std::string path;
+        std::shared_ptr<HttpClient> httpClientAugmentor;
         int numInFlight;
         int maxInFlight;
     };
@@ -37,12 +40,12 @@ struct HttpAugmentorInterface : public AugmentorInterface
         std::string name;                   ///< What the augmentation is called
         std::vector<AugmentorInstanceInfo> instances;
 
-        AugmentorInstanceInfo* findInstance(const std::string& url)
+        AugmentorInstanceInfo* findInstance(const std::string& path)
         {
             for (auto it = instances.begin(), end = instances.end();
                  it != end; ++it)
             {
-                if (it->url == url) return &(*it);
+                if (it->path == path) return &(*it);
             }
             return nullptr;
 
@@ -119,7 +122,6 @@ private:
 
     MessageLoop loop;
     int idle_;
-    std::shared_ptr<HttpClient> httpClientAugmentor;
 
     enum Format {
         FMT_STANDARD,
@@ -137,6 +139,9 @@ private:
     void checkExpiries();
 
     void augmentationExpired(const Id & id, const Entry & entry);
+
+    AugmentorInstanceInfo* pickInstance(AugmentorInfo& aug);
+
 };
 
 }

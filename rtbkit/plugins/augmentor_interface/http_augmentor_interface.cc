@@ -73,8 +73,22 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
             augmentorHttpActiveConnections = conf.get("httpActiveConnections", 1024).asInt();
             augFormat = readFormat(conf.get("format", "standard").asString());
 
-            std::string url = augHost + augPath;
-            AugmentorInstanceInfo inst(url);
+            AugmentorInstanceInfo inst(augHost, augPath);
+            inst.httpClientAugmentor.reset(
+                new HttpClient(augHost, augmentorHttpActiveConnections));
+
+            /* We do not want curl to add an extra "Expect: 100-continue" HTTP header
+             * and then pay the cost of an extra HTTP roundtrip. Thus we remove this
+             * header
+             */
+            inst.httpClientAugmentor->sendExpect100Continue(false);
+            loop.addSource("HttpAugmentorInterface::httpClientAugmentor",
+                                inst.httpClientAugmentor);
+
+            loop.addPeriodic("HttpAugmentorInterface::reportQueues", 1.0, [=](uint64_t) {
+                recordLevel(inst.httpClientAugmentor->queuedRequests(), "queuedRequests");
+            });
+
             AugmentorInfoMap::iterator it;
             if((it = augmentors.find(augName)) == augmentors.end()){
                 std::shared_ptr<AugmentorInfo> info = std::make_shared<AugmentorInfo>(augName);
@@ -102,20 +116,7 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
             << "\t\t}"<< std::endl
             << "\t]" << std::endl
             << "}" << std::endl;
-    }    
-
-    httpClientAugmentor.reset(new HttpClient(augHost, augmentorHttpActiveConnections));
-    
-    /* We do not want curl to add an extra "Expect: 100-continue" HTTP header
-     * and then pay the cost of an extra HTTP roundtrip. Thus we remove this
-     * header
-     */
-    httpClientAugmentor->sendExpect100Continue(false);
-    loop.addSource("HttpAugmentorInterface::httpClientAugmentor", httpClientAugmentor);
-
-    loop.addPeriodic("HttpAugmentorInterface::reportQueues", 1.0, [=](uint64_t) {
-        recordLevel(httpClientAugmentor->queuedRequests(), "queuedRequests");
-    });
+    }
     
 }
 
@@ -232,7 +233,169 @@ void HttpAugmentorInterface::registerLoopMonitor(LoopMonitor *monitor) const {
 }
 
 void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry){
-    /*TODO*/
+    Date now = Date::now();
+
+    if (augmenting.count(entry->info->auction->id)) {
+        std::stringstream ss;
+        ss << "AugmentationLoop: duplicate auction id detected "
+            << entry->info->auction->id << std::endl;
+        std::cerr << ss.str();
+        recordHit("duplicateAuction");
+        return;
+    }
+
+    bool sentToAugmentor = false;
+
+
+    for (auto it = entry->outstanding.begin(), end = entry->outstanding.end();
+         it != end;  ++it)
+    {
+        auto & aug = *augmentors[*it];
+        const AugmentorInstanceInfo* instance = pickInstance(aug);
+        if (!instance) {
+            recordHit("augmentor.%s.skippedTooManyInFlight", *it);
+            continue;
+        }
+        recordHit("augmentor.%s.instances.%s.request", *it, instance->path);
+
+        std::set<std::string> agents = entry->augmentorAgents[*it];
+
+        std::ostringstream availableAgentsStr;
+        ML::DB::Store_Writer writer(availableAgentsStr);
+        writer.save(agents);
+
+        std::string matched_agents = availableAgentsStr.str();
+        std::string name = *it;
+        std::string aid = entry->info->auction->id.toString();
+        Date date = Date::now();
+        std::string path = instance->path;
+
+        HttpRequest::Content reqContent {
+                entry->info->auction->requestStr, "application/json" };
+
+        RestParams headers { { "x-openrtb-version", "2.1" } };
+        std::cerr << "Sending HTTP POST to: " << path << std::endl;
+
+        auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
+            [=, &entry](const HttpRequest &request, HttpClientError errorCode,
+                int statusCode, const std::string &, std::string &&body)
+            {
+                recordEvent("augmentation.response");
+                // get the version
+                std::string version = request.headers_.getValue(
+                                                    "x-rtbkit-protocol-version");
+                ExcCheckEqual(version, "1.0", "unknown response version");
+
+                // get the timestamp
+                std::string t = request.headers_.getValue("x-rtbkit-timestamp");
+                Date startTime = Date::parseSecondsSinceEpoch(t);
+                // get the auction id
+                std::string auctionid = request.headers_.getValue(
+                                                    "x-rtbkit-auction-id");
+                Id id(auctionid);
+                // get all the augmentation data
+                const std::string & augmentor = request.headers_.getValue(
+                                                    "x-rtbkit-augmentor-name");
+                const std::string & augmentation = body;
+
+                ML::Timer timer;
+
+                AugmentationList augmentationList;
+                if (augmentation != "" && augmentation != "null") {
+                    try {
+                        Json::Value augmentationJson;
+
+                        JML_TRACE_EXCEPTIONS(false);
+                        augmentationJson = Json::parse(augmentation);
+                        augmentationList = AugmentationList::fromJson(augmentationJson);
+                    } catch (const std::exception & exc) {
+                        std::string eventName = "augmentor." + augmentor
+                            + ".responseParsingExceptions";
+                        recordEvent(eventName.c_str(), ET_COUNT);
+                    }
+                }
+
+                recordLevel(timer.elapsed_wall(), "responseParseTimeMs");
+
+                {
+                    double timeTakenMs = startTime.secondsUntil(Date::now()) * 1000.0;
+                    std::string eventName = "augmentor." + augmentor + ".timeTakenMs";
+                    recordEvent(eventName.c_str(), ET_OUTCOME, timeTakenMs);
+                }
+
+                {
+                    double responseLength = augmentation.size();
+                    std::string eventName = "augmentor." + augmentor + ".responseLengthBytes";
+                    recordEvent(eventName.c_str(), ET_OUTCOME, responseLength);
+                }
+
+                auto augmentorIt = augmentors.find(augmentor);
+                if (augmentorIt != augmentors.end()) {
+                    auto instance = augmentorIt->second->findInstance(path);
+                    if (instance) instance->numInFlight--;
+                }
+
+                auto augmentingIt = augmenting.find(id);
+                if (augmentingIt == augmenting.end()) {
+                    recordHit("augmentation.unknown");
+                    recordHit("augmentor.%s.unknown", augmentor, path);
+                    recordHit("augmentor.%s.instances.%s.unknown", augmentor, path);
+                    return;
+                }
+
+                auto& entry = *augmentingIt;
+
+                const char* eventType =
+                    (augmentation == "" || augmentation == "null") ?
+                    "nullResponse" : "validResponse";
+                recordHit("augmentor.%s.%s", augmentor, eventType);
+                recordHit("augmentor.%s.instances.%s.%s", augmentor, path, eventType);
+
+                auto& auctionAugs = entry.second->info->auction->augmentations;
+                auctionAugs[augmentor].mergeWith(augmentationList);
+
+                entry.second->outstanding.erase(augmentor);
+                if (entry.second->outstanding.empty()) {
+                    entry.second->onFinished(entry.second->info);
+                    augmenting.erase(augmentingIt);
+                }
+            }
+        );
+
+        instance->httpClientAugmentor->post(path, callbacks, reqContent, { }, headers);
+        sentToAugmentor = true;
+    }
+
+    if (sentToAugmentor)
+        augmenting.insert(entry->info->auction->id, entry, entry->timeout);
+    else entry->onFinished(entry->info);
+
+    recordLevel(Date::now().secondsSince(now), "requestTimeMs");
+
+    idle_ = 0;
+}
+
+HttpAugmentorInterface::AugmentorInstanceInfo*
+HttpAugmentorInterface::
+pickInstance(AugmentorInfo& aug)
+{
+    AugmentorInstanceInfo* instance = nullptr;
+    int minInFlights = std::numeric_limits<int>::max();
+
+    std::stringstream ss;
+
+    for (auto it = aug.instances.begin(), end = aug.instances.end();
+         it != end; ++it)
+    {
+        if (it->numInFlight >= minInFlights) continue;
+        if (it->numInFlight >= it->maxInFlight) continue;
+
+        instance = &(*it);
+        minInFlights = it->numInFlight;
+    }
+
+    if (instance) instance->numInFlight++;
+    return instance;
 }
 
 void HttpAugmentorInterface::recordStats(){
@@ -277,4 +440,4 @@ void
 HttpAugmentorInterface::augmentationExpired(const Id & id, const Entry & entry)
 {
     entry.onFinished(entry.info);
-}   
+}
