@@ -36,6 +36,7 @@
 #include "rtbkit/core/agent_configuration/agent_config.h"
 #include "rtbkit/core/monitor/monitor_provider.h"
 #include "rtbkit/core/monitor/monitor_client.h"
+#include "rtbkit/common/augmentor_interface.h"
 
 namespace RTBKIT {
 
@@ -412,7 +413,7 @@ public:
 
     ML::RingBufferSRMW<std::pair<std::string, std::shared_ptr<const AgentConfig> > > configBuffer;
     ML::RingBufferSRMW<std::shared_ptr<ExchangeConnector> > exchangeBuffer;
-    ML::RingBufferSRMW<std::shared_ptr<AugmentationInfo> > startBiddingBuffer;
+    ML::RingBufferSRMW<std::shared_ptr<AugmentorInterface::AugmentationInfo> > startBiddingBuffer;
     ML::RingBufferSRMW<std::shared_ptr<Auction> > submittedBuffer;
     ML::RingBufferSWMR<std::shared_ptr<Auction> > auctionGraveyard;
     ML::RingBufferSRMW<BidMessage> doBidBuffer;
@@ -422,6 +423,8 @@ public:
     FilterPool filters;
 
     AugmentationLoop augmentationLoop;
+    std::shared_ptr<AugmentorInterface> augmentor;
+
     Blacklist blacklist;
 
     LoopMonitor loopMonitor;
@@ -460,13 +463,13 @@ public:
 
         This can be called from any thread.
     */
-    std::shared_ptr<AugmentationInfo>
+    std::shared_ptr<AugmentorInterface::AugmentationInfo>
     preprocessAuction(const std::shared_ptr<Auction> & auction);
 
     /** Send the auction for augmentation.  Once that is done, doStartBidding
         will be called.
     */
-    void augmentAuction(const std::shared_ptr<AugmentationInfo> & info);
+    void augmentAuction(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info);
 
     /** We've finished augmenting our auctions.  Allow the agents to bid
         on them.
@@ -474,7 +477,7 @@ public:
     void doStartBidding(const std::vector<std::string> & message);
 
     /** Ditto but taking the augmented auction directly. */
-    void doStartBidding(const std::shared_ptr<AugmentationInfo> & augInfo);
+    void doStartBidding(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & augInfo);
 
     /** Auction has been submitted.  Do the final cleanup here and send
         it off to the post auction loop. */

@@ -224,12 +224,11 @@ void
 Router::
 initAugmentorInterface(Json::Value const & json)
 {
-    /*
-    bidder = BidderInterface::create(
+    std::cerr << "initAugmentorInterface : " << json << std::endl;
+    augmentor = AugmentorInterface::create(
             serviceName() + ".augmentor", getServices(), json);
-    bidder->init(&bridge, this);
-    bidder->registerLoopMonitor(&loopMonitor);
-    */
+    augmentor->init(this);
+    augmentor->registerLoopMonitor(&loopMonitor);
 }
 
 void
@@ -258,7 +257,8 @@ init()
         initBidderInterface(json);
     }
 
-    augmentationLoop.init();
+    //XXX : nemi fix
+    //augmentationLoop.init();
 
     logger.init(getServices()->config, serviceName() + "/logger");
 
@@ -292,7 +292,8 @@ init()
     monitorProviderClient.init(getServices()->config);
 
     loopMonitor.init();
-    loopMonitor.addMessageLoop("augmentationLoop", &augmentationLoop);
+    //XXX : nemi fix
+    //loopMonitor.addMessageLoop("augmentationLoop", &augmentationLoop);
     loopMonitor.addMessageLoop("logger", &logger);
     loopMonitor.addMessageLoop("configListener", &configListener);
     loopMonitor.addMessageLoop("monitorClient", &monitorClient);
@@ -403,9 +404,11 @@ start(boost::function<void ()> onStop)
         };
 
     bidder->start();
+    augmentor->start();
     logger.start();
     analytics.start();
-    augmentationLoop.start();
+    //XXX : nemi fix
+    //augmentationLoop.start();
     runThread.reset(new boost::thread(runfn));
 
     if (connectPostAuctionLoop) {
@@ -449,7 +452,9 @@ numNonIdle() const
     {
         Guard guard(lock);
         numInFlight = inFlight.size();
-        numAwaitingAugmentation = augmentationLoop.numAugmenting();
+        //XXX : nemi fix
+        //numAwaitingAugmentation = augmentationLoop.numAugmenting();
+        numAwaitingAugmentation = augmentor->numAugmenting();
     }
 
     cerr << "numInFlight = " << numInFlight << endl;
@@ -465,7 +470,9 @@ sleepUntilIdle()
     /*XXX NEMI : check if this is still valid code the HTTP interface,
       doesnt look like this method is called at all*/
     for (int iter = 0;;++iter) {
-        augmentationLoop.sleepUntilIdle();
+        //XXX : nemi fix
+        //augmentor->sleepUntilIdle();
+        //augmentationLoop.sleepUntilIdle();
         size_t nonIdle = numNonIdle();
         if (nonIdle == 0) break;
         //cerr << "there are " << nonIdle << " non-idle" << endl;
@@ -604,7 +611,7 @@ run()
 
         {
             double atStart = getTime();
-            std::shared_ptr<AugmentationInfo> info;
+            std::shared_ptr<AugmentorInterface::AugmentationInfo> info;
             while (startBiddingBuffer.tryPop(info)) {
                 doStartBidding(info);
             }
@@ -717,7 +724,9 @@ run()
                        Date::fromSecondsSinceEpoch(last_check).print(),
                        format("active: %zd augmenting, %zd inFlight, "
                               "%zd agents",
-                              augmentationLoop.numAugmenting(),
+                              // XXX : fix nemi
+                              //augmentationLoop.numAugmenting();
+                              augmentor->numAugmenting(),
                               inFlight.size(),
                               agents.size()));
 
@@ -789,7 +798,9 @@ shutdown()
     futex_wake(shutdown_);
     wakeupMainLoop.signal();
 
-    augmentationLoop.shutdown();
+    //XXX : fix nemi
+    //augmentationLoop.shutdown();
+    augmentor->shutdown();
 
     if (runThread)
         runThread->join();
@@ -898,6 +909,7 @@ handleAgentMessage(const std::vector<std::string> & message)
             if (!agents.count(configName)) {
                 // We don't yet know about its configuration
                 bidder->sendMessage(nullptr, address, "NEEDCONFIG");
+                //XXX : nemi how this relates with the bridge and augmentors ?
                 return;
             }
             agents[configName].address = address;
@@ -1272,7 +1284,9 @@ doStats(const std::vector<std::string> & message)
 {
     Json::Value result(Json::objectValue);
 
-    result["numAugmenting"] = augmentationLoop.numAugmenting();
+    // XXX: nemi bridge
+    //result["numAugmenting"] = augmentationLoop.numAugmenting();
+    result["numAugmenting"] = augmentor->numAugmenting();
     result["numInFlight"] = inFlight.size();
     result["blacklistUsers"] = blacklist.size();
 
@@ -1321,7 +1335,7 @@ getServiceStatus() const
 
 void
 Router::
-augmentAuction(const std::shared_ptr<AugmentationInfo> & info)
+augmentAuction(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info)
 {
     if (!info || !info->auction)
         throw ML::Exception("augmentAuction with no auction to augment");
@@ -1333,8 +1347,9 @@ augmentAuction(const std::shared_ptr<AugmentationInfo> & info)
 
     double augmentationWindow = 0.005; // 5ms available to augment
 
-    auto onDoneAugmenting = [=] (const std::shared_ptr<AugmentationInfo> & info)
+    auto onDoneAugmenting = [=] (const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info)
         {
+            std::cerr << "onDoneAugmenting" << std::endl;
             info->auction->doneAugmenting = Date::now();
 
             if (info->auction->tooLate()) {
@@ -1347,11 +1362,14 @@ augmentAuction(const std::shared_ptr<AugmentationInfo> & info)
             wakeupMainLoop.signal();
         };
 
-    augmentationLoop.augment(info, Date::now().plusSeconds(augmentationWindow),
+    // XXX: nemi bridge
+    //augmentationLoop.augment(info, Date::now().plusSeconds(augmentationWindow),
+    //                         onDoneAugmenting);
+    augmentor->augment(info, Date::now().plusSeconds(augmentationWindow),
                              onDoneAugmenting);
 }
 
-std::shared_ptr<AugmentationInfo>
+std::shared_ptr<AugmentorInterface::AugmentationInfo>
 Router::
 preprocessAuction(const std::shared_ptr<Auction> & auction)
 {
@@ -1372,7 +1390,7 @@ preprocessAuction(const std::shared_ptr<Auction> & auction)
     if (auction->tooLate()) {
         recordHit("tooLateBeforeRouting");
         //inFlight.erase(auctionId);
-        return std::shared_ptr<AugmentationInfo>();
+        return std::shared_ptr<AugmentorInterface::AugmentationInfo>();
     }
 
     const string & exchange = auction->request->exchange;
@@ -1494,10 +1512,10 @@ preprocessAuction(const std::shared_ptr<Auction> & auction)
         }
 
         //cerr << "no valid groups " << endl;
-        return std::shared_ptr<AugmentationInfo>();
+        return std::shared_ptr<AugmentorInterface::AugmentationInfo>();
     }
 
-    auto info = std::make_shared<AugmentationInfo>(auction, lossTimeout);
+    auto info = std::make_shared<AugmentorInterface::AugmentationInfo>(auction, lossTimeout);
     info->potentialGroups.swap(validGroups);
 
     auction->outOfPrepro = Date::now();
@@ -1512,14 +1530,14 @@ void
 Router::
 doStartBidding(const std::vector<std::string> & message)
 {
-    std::shared_ptr<AugmentationInfo> augInfo
-        = sharedPtrFromMessage<AugmentationInfo>(message.at(2));
+    std::shared_ptr<AugmentorInterface::AugmentationInfo> augInfo
+        = sharedPtrFromMessage<AugmentorInterface::AugmentationInfo>(message.at(2));
     doStartBidding(augInfo);
 }
 
 void
 Router::
-doStartBidding(const std::shared_ptr<AugmentationInfo> & augInfo)
+doStartBidding(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & augInfo)
 {
     //static const char *fName = "Router::doStartBidding:";
     RouterProfiler profiler(dutyCycleCurrent.nsStartBidding);
@@ -2404,7 +2422,7 @@ onNewAuction(std::shared_ptr<Auction> auction)
         }
     }
 
-    //cerr << "AUCTION GOT THROUGH" << endl;
+    std::cerr << "AUCTION GOT THROUGH" << std::endl;
 
     if (logAuctions)
         // Send AUCTION to logger
@@ -2420,10 +2438,12 @@ onNewAuction(std::shared_ptr<Auction> auction)
     auto info = preprocessAuction(auction);
 
     if (info) {
+        std::cerr << "auctionPassedPreprocessing" << std::endl;
         recordHit("auctionPassedPreprocessing");
         augmentAuction(info);
     }
     else {
+        std::cerr << "auctionDropped.noPotentialBidders" << std::endl;
         recordHit("auctionDropped.noPotentialBidders");
         ML::atomic_inc(numNoPotentialBidders);
     }

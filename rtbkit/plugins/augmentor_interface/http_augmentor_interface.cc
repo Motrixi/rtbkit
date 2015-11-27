@@ -53,16 +53,18 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
                                          std::shared_ptr<ServiceProxies> proxies,
                                          Json::Value const & json)
         : AugmentorInterface(proxies, serviceName),
-        allAugmentors(0),
+        allAugmentors(new AllAugmentorInfo),
         idle_(1),
         inbox(65536) {
 
+    std::cerr << "HttpAugmentorInterface constructor" << std::endl;
     int augmentorHttpActiveConnections = 0;
     
     std::string augHost;
     std::string augPath;
     std::string augName;
     std::string augFormat;
+    int maxInFlight;
 
     try {
         auto augs = json["augmentors"];
@@ -70,10 +72,11 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
             augHost = conf["host"].asString();
             augPath = conf["path"].asString();
             augName = conf["name"].asString();
+            maxInFlight = conf["maxInFlight"].asInt();
             augmentorHttpActiveConnections = conf.get("httpActiveConnections", 1024).asInt();
             augFormat = readFormat(conf.get("format", "standard").asString());
 
-            AugmentorInstanceInfo inst(augHost, augPath);
+            AugmentorInstanceInfo inst(augHost, augPath, maxInFlight);
             inst.httpClientAugmentor.reset(
                 new HttpClient(augHost, augmentorHttpActiveConnections));
 
@@ -89,14 +92,20 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
                 recordLevel(inst.httpClientAugmentor->queuedRequests(), "queuedRequests");
             });
 
+            AugmentorInfoEntry e;
+            e.name = augName;
+
             AugmentorInfoMap::iterator it;
             if((it = augmentors.find(augName)) == augmentors.end()){
                 std::shared_ptr<AugmentorInfo> info = std::make_shared<AugmentorInfo>(augName);
                 info->instances.push_back(inst);
                 augmentors.insert(make_pair(augName, info));
+                e.info = info;
             }else{
                 it->second->instances.push_back(inst);
+                e.info = it->second;
             }
+            allAugmentors->push_back(e);
         }
     } catch (const std::exception & e) {
         THROW(error) << "configuration file is invalid" << std::endl
@@ -108,11 +117,13 @@ HttpAugmentorInterface::HttpAugmentorInterface(std::string serviceName,
             << "\t\t\t\"name\": \"augmentor01\"," << std::endl
             << "\t\t\t\"host\": \"http://localhost\"," << std::endl
             << "\t\t\t\"path\": \"/augmentor01\"" << std::endl
+            << "\t\t\t\"maxInFlight\": 1024" << std::endl
             << "\t\t}," << std::endl
             << "\t\t{" << std::endl
             << "\t\t\t\"name\": \"augmentor02\"," << std::endl
             << "\t\t\t\"host\": \"http://localhost\"," << std::endl
             << "\t\t\t\"path\": \"/augmentor02\"" << std::endl
+            << "\t\t\t\"maxInFlight\": 1024" << std::endl
             << "\t\t}"<< std::endl
             << "\t]" << std::endl
             << "}" << std::endl;
@@ -191,6 +202,7 @@ void HttpAugmentorInterface::augment(
     GcLock::SharedGuard guard(allAugmentorsGc);
     const AllAugmentorInfo * ai = allAugmentors;
     
+    //XXX : fix nemi
     ExcAssert(ai);
 
     auto it1 = augmentors.begin(), end1 = augmentors.end();
@@ -221,9 +233,10 @@ void HttpAugmentorInterface::augment(
 
     if(entry->outstanding.empty()){
         // No augmentors required... run the auction straight away
+        std::cerr << "No augmentors required... run the auction straight away" << std::endl;
         onFinished(info);
     }else{
-        //cerr << "putting in inbox" << endl;
+        std::cerr << "putting in inbox" << std::endl;
         inbox.push(entry);
     }
 }
@@ -235,12 +248,15 @@ void HttpAugmentorInterface::registerLoopMonitor(LoopMonitor *monitor) const {
 void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry){
     Date now = Date::now();
 
+    std::cerr << "doAugmentation" << std::endl;
+
     if (augmenting.count(entry->info->auction->id)) {
         std::stringstream ss;
         ss << "AugmentationLoop: duplicate auction id detected "
             << entry->info->auction->id << std::endl;
         std::cerr << ss.str();
         recordHit("duplicateAuction");
+        std::cerr << "duplicate auction" << std::endl;
         return;
     }
 
@@ -250,28 +266,28 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
     for (auto it = entry->outstanding.begin(), end = entry->outstanding.end();
          it != end;  ++it)
     {
+        std::cerr << "processing outstanding : " << *it << std::endl;
         auto & aug = *augmentors[*it];
         const AugmentorInstanceInfo* instance = pickInstance(aug);
         if (!instance) {
             recordHit("augmentor.%s.skippedTooManyInFlight", *it);
+            std::cerr << "skippedTooManyInFlight" << std::endl;
             continue;
         }
         recordHit("augmentor.%s.instances.%s.request", *it, instance->path);
 
         std::set<std::string> agents = entry->augmentorAgents[*it];
+        for(auto it = agents.begin(); it != agents.end(); ++it)
+            entry->info->auction->request->ext["agents"].append(*it);
 
-        std::ostringstream availableAgentsStr;
-        ML::DB::Store_Writer writer(availableAgentsStr);
-        writer.save(agents);
-
-        std::string matched_agents = availableAgentsStr.str();
+        
         std::string name = *it;
         std::string aid = entry->info->auction->id.toString();
         Date date = Date::now();
         std::string path = instance->path;
 
         HttpRequest::Content reqContent {
-                entry->info->auction->requestStr, "application/json" };
+                entry->info->auction->request->toJsonStr(), "application/json" };
 
         RestParams headers { { "x-openrtb-version", "2.1" } };
         std::cerr << "Sending HTTP POST to: " << path << std::endl;
@@ -362,6 +378,7 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
             }
         );
 
+        std::cerr << "calling path " << path << std::endl;
         instance->httpClientAugmentor->post(path, callbacks, reqContent, { }, headers);
         sentToAugmentor = true;
     }
@@ -383,10 +400,11 @@ pickInstance(AugmentorInfo& aug)
     int minInFlights = std::numeric_limits<int>::max();
 
     std::stringstream ss;
-
+    std::cerr << "pickInstance" << std::endl;
     for (auto it = aug.instances.begin(), end = aug.instances.end();
          it != end; ++it)
     {
+        std::cerr << "pickInstance" << std::endl;
         if (it->numInFlight >= minInFlights) continue;
         if (it->numInFlight >= it->maxInFlight) continue;
 
@@ -441,3 +459,25 @@ HttpAugmentorInterface::augmentationExpired(const Id & id, const Entry & entry)
 {
     entry.onFinished(entry.info);
 }
+
+//
+// factory
+//
+
+namespace {
+
+struct AtInit {
+    AtInit()
+    {
+      PluginInterface<AugmentorInterface>::registerPlugin("http",
+          [](std::string const &serviceName,
+             std::shared_ptr<ServiceProxies> const &proxies,
+             Json::Value const &json)
+          {
+              return new HttpAugmentorInterface(serviceName, proxies, json);
+          });
+    }
+} atInit;
+
+}
+
