@@ -233,10 +233,8 @@ void HttpAugmentorInterface::augment(
 
     if(entry->outstanding.empty()){
         // No augmentors required... run the auction straight away
-        std::cerr << "No augmentors required... run the auction straight away" << std::endl;
         onFinished(info);
     }else{
-        std::cerr << "putting in inbox" << std::endl;
         inbox.push(entry);
     }
 }
@@ -247,8 +245,6 @@ void HttpAugmentorInterface::registerLoopMonitor(LoopMonitor *monitor) const {
 
 void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry){
     Date now = Date::now();
-
-    std::cerr << "doAugmentation" << std::endl;
 
     if (augmenting.count(entry->info->auction->id)) {
         std::stringstream ss;
@@ -266,7 +262,6 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
     for (auto it = entry->outstanding.begin(), end = entry->outstanding.end();
          it != end;  ++it)
     {
-        std::cerr << "processing outstanding : " << *it << std::endl;
         auto & aug = *augmentors[*it];
         const AugmentorInstanceInfo* instance = pickInstance(aug);
         if (!instance) {
@@ -289,31 +284,34 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
         HttpRequest::Content reqContent {
                 entry->info->auction->request->toJsonStr(), "application/json" };
 
-        RestParams headers { { "x-openrtb-version", "2.1" } };
+        RestParams headers { { "X-Openrtb-Version", "2.1" } };
         std::cerr << "Sending HTTP POST to: " << path << std::endl;
 
         auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
             [=, &entry](const HttpRequest &request, HttpClientError errorCode,
-                int statusCode, const std::string &, std::string &&body)
+                int statusCode, const std::string && headers, std::string &&body)
             {
                 recordEvent("augmentation.response");
+
+                RestParams headers_;
+                try {
+                     headers_ = RestParams::fromString(headers);
+                } catch (...) {
+                    std::cerr << "Excpetion caught" << std::endl;
+                }
                 // get the version
-                std::string version = request.headers_.getValue(
-                                                    "x-rtbkit-protocol-version");
+                std::string version = headers_.getValue("X-Rtbkit-Protocol-Version");
                 ExcCheckEqual(version, "1.0", "unknown response version");
 
                 // get the timestamp
-                std::string t = request.headers_.getValue("x-rtbkit-timestamp");
+                std::string t = headers_.getValue("X-Rtbkit-Timestamp");
                 Date startTime = Date::parseSecondsSinceEpoch(t);
                 // get the auction id
-                std::string auctionid = request.headers_.getValue(
-                                                    "x-rtbkit-auction-id");
+                std::string auctionid = headers_.getValue("X-Rtbkit-Auction-Id");
                 Id id(auctionid);
                 // get all the augmentation data
-                const std::string & augmentor = request.headers_.getValue(
-                                                    "x-rtbkit-augmentor-name");
+                const std::string & augmentor = headers_.getValue("X-Rtbkit-Augmentor-Name");
                 const std::string & augmentation = body;
-
                 ML::Timer timer;
 
                 AugmentationList augmentationList;
@@ -350,7 +348,6 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
                     auto instance = augmentorIt->second->findInstance(path);
                     if (instance) instance->numInFlight--;
                 }
-
                 auto augmentingIt = augmenting.find(id);
                 if (augmentingIt == augmenting.end()) {
                     recordHit("augmentation.unknown");
@@ -378,7 +375,6 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
             }
         );
 
-        std::cerr << "calling path " << path << std::endl;
         instance->httpClientAugmentor->post(path, callbacks, reqContent, { }, headers);
         sentToAugmentor = true;
     }
@@ -400,11 +396,9 @@ pickInstance(AugmentorInfo& aug)
     int minInFlights = std::numeric_limits<int>::max();
 
     std::stringstream ss;
-    std::cerr << "pickInstance" << std::endl;
     for (auto it = aug.instances.begin(), end = aug.instances.end();
          it != end; ++it)
     {
-        std::cerr << "pickInstance" << std::endl;
         if (it->numInFlight >= minInFlights) continue;
         if (it->numInFlight >= it->maxInFlight) continue;
 

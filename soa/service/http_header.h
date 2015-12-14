@@ -40,6 +40,8 @@ struct RestParams
 
     std::string uriEscaped() const;
 
+    static RestParams fromString(const std::string& headers);
+
     static RestParams fromBinary(const std::string & binary);
     std::string toBinary() const;
 };

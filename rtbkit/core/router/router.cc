@@ -1349,7 +1349,6 @@ augmentAuction(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & inf
 
     auto onDoneAugmenting = [=] (const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info)
         {
-            std::cerr << "onDoneAugmenting" << std::endl;
             info->auction->doneAugmenting = Date::now();
 
             if (info->auction->tooLate()) {
@@ -2422,7 +2421,6 @@ onNewAuction(std::shared_ptr<Auction> auction)
         }
     }
 
-    std::cerr << "AUCTION GOT THROUGH" << std::endl;
 
     if (logAuctions)
         // Send AUCTION to logger
@@ -2438,7 +2436,6 @@ onNewAuction(std::shared_ptr<Auction> auction)
     auto info = preprocessAuction(auction);
 
     if (info) {
-        std::cerr << "auctionPassedPreprocessing" << std::endl;
         recordHit("auctionPassedPreprocessing");
         augmentAuction(info);
     }
