@@ -127,7 +127,6 @@ Router(ServiceBase & parent,
       submittedBuffer(65536),
       auctionGraveyard(65536),
       doBidBuffer(65536),
-      augmentationLoop(*this),
       loopMonitor(*this),
       loadStabilizer(loopMonitor),
       secondsUntilLossAssumed_(secondsUntilLossAssumed),
@@ -179,7 +178,6 @@ Router(std::shared_ptr<ServiceProxies> services,
       submittedBuffer(65536),
       auctionGraveyard(65536),
       doBidBuffer(65536),
-      augmentationLoop(*this),
       loopMonitor(*this),
       loadStabilizer(loopMonitor),
       secondsUntilLossAssumed_(secondsUntilLossAssumed),
@@ -257,9 +255,6 @@ init()
         initBidderInterface(json);
     }
 
-    //XXX : nemi fix
-    //augmentationLoop.init();
-
     logger.init(getServices()->config, serviceName() + "/logger");
 
     bridge.agents.init(getServices()->config, serviceName() + "/agents");
@@ -292,8 +287,13 @@ init()
     monitorProviderClient.init(getServices()->config);
 
     loopMonitor.init();
-    //XXX : nemi fix
-    //loopMonitor.addMessageLoop("augmentationLoop", &augmentationLoop);
+
+    if(augmentor->getLoop()){
+        // Ugly hack to access the old augmentation loop using
+        // the augmentor interface
+        loopMonitor.addMessageLoop("augmentationLoop",
+                    (AugmentationLoop*)augmentor->getLoop());
+    }
     loopMonitor.addMessageLoop("logger", &logger);
     loopMonitor.addMessageLoop("configListener", &configListener);
     loopMonitor.addMessageLoop("monitorClient", &monitorClient);
@@ -358,18 +358,6 @@ bindAgents(std::string agentUri)
 
 void
 Router::
-bindAugmentors(const std::string & uri)
-{
-    try {
-        augmentationLoop.bindAugmentors(uri);
-    } catch (const std::exception & exc) {
-        throw Exception("error while binding augmentation URI %s: %s",
-                        uri.c_str(), exc.what());
-    }
-}
-
-void
-Router::
 unsafeDisableMonitor()
 {
     // TODO: we shouldn't be reaching inside these structures...
@@ -407,8 +395,7 @@ start(boost::function<void ()> onStop)
     augmentor->start();
     logger.start();
     analytics.start();
-    //XXX : nemi fix
-    //augmentationLoop.start();
+
     runThread.reset(new boost::thread(runfn));
 
     if (connectPostAuctionLoop) {
@@ -452,8 +439,6 @@ numNonIdle() const
     {
         Guard guard(lock);
         numInFlight = inFlight.size();
-        //XXX : nemi fix
-        //numAwaitingAugmentation = augmentationLoop.numAugmenting();
         numAwaitingAugmentation = augmentor->numAugmenting();
     }
 
@@ -470,9 +455,7 @@ sleepUntilIdle()
     /*XXX NEMI : check if this is still valid code the HTTP interface,
       doesnt look like this method is called at all*/
     for (int iter = 0;;++iter) {
-        //XXX : nemi fix
-        //augmentor->sleepUntilIdle();
-        //augmentationLoop.sleepUntilIdle();
+        augmentor->sleepUntilIdle();
         size_t nonIdle = numNonIdle();
         if (nonIdle == 0) break;
         //cerr << "there are " << nonIdle << " non-idle" << endl;
@@ -724,8 +707,6 @@ run()
                        Date::fromSecondsSinceEpoch(last_check).print(),
                        format("active: %zd augmenting, %zd inFlight, "
                               "%zd agents",
-                              // XXX : fix nemi
-                              //augmentationLoop.numAugmenting();
                               augmentor->numAugmenting(),
                               inFlight.size(),
                               agents.size()));
@@ -798,8 +779,6 @@ shutdown()
     futex_wake(shutdown_);
     wakeupMainLoop.signal();
 
-    //XXX : fix nemi
-    //augmentationLoop.shutdown();
     augmentor->shutdown();
 
     if (runThread)
@@ -909,7 +888,6 @@ handleAgentMessage(const std::vector<std::string> & message)
             if (!agents.count(configName)) {
                 // We don't yet know about its configuration
                 bidder->sendMessage(nullptr, address, "NEEDCONFIG");
-                //XXX : nemi how this relates with the bridge and augmentors ?
                 return;
             }
             agents[configName].address = address;
@@ -1284,8 +1262,6 @@ doStats(const std::vector<std::string> & message)
 {
     Json::Value result(Json::objectValue);
 
-    // XXX: nemi bridge
-    //result["numAugmenting"] = augmentationLoop.numAugmenting();
     result["numAugmenting"] = augmentor->numAugmenting();
     result["numInFlight"] = inFlight.size();
     result["blacklistUsers"] = blacklist.size();
@@ -1361,9 +1337,6 @@ augmentAuction(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & inf
             wakeupMainLoop.signal();
         };
 
-    // XXX: nemi bridge
-    //augmentationLoop.augment(info, Date::now().plusSeconds(augmentationWindow),
-    //                         onDoneAugmenting);
     augmentor->augment(info, Date::now().plusSeconds(augmentationWindow),
                              onDoneAugmenting);
 }

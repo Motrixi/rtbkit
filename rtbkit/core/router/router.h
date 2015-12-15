@@ -158,9 +158,6 @@ struct Router : public ServiceBase,
     /** Bind a zeroMQ URI for the agent to listen on. */
     void bindAgents(std::string agentUri);
 
-    /** Bind a zeroMQ URI to listen for augmentation messages on. */
-    void bindAugmentors(const std::string & uri);
-
     /** Disable the monitor for testing purposes.  In production this could lead
         to unbounded overspend, so please do really only use it for testing.
     */
@@ -422,7 +419,6 @@ public:
 
     FilterPool filters;
 
-    AugmentationLoop augmentationLoop;
     std::shared_ptr<AugmentorInterface> augmentor;
 
     Blacklist blacklist;

@@ -285,7 +285,6 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
                 entry->info->auction->request->toJsonStr(), "application/json" };
 
         RestParams headers { { "X-Openrtb-Version", "2.1" } };
-        std::cerr << "Sending HTTP POST to: " << path << std::endl;
 
         auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
             [=, &entry](const HttpRequest &request, HttpClientError errorCode,

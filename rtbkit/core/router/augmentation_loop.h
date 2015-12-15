@@ -9,6 +9,7 @@
 #define __rtb_router__augmentation_loop_h__
 
 #include "rtbkit/common/augmentation.h"
+#include "rtbkit/common/augmentor_interface.h"
 #include "soa/service/timeout_map.h"
 #include "soa/service/zmq_endpoint.h"
 #include "soa/service/typed_message_channel.h"
@@ -61,24 +62,6 @@ struct AugmentorInfo {
     }
 };
 
-// Information about an auction being augmented
-struct AugmentationInfo {
-    AugmentationInfo()
-    {
-    }
-
-    AugmentationInfo(const std::shared_ptr<Auction> & auction,
-                     Date lossTimeout)
-        : auction(auction), lossTimeout(lossTimeout)
-    {
-    }
-
-    std::shared_ptr<Auction> auction;   ///< Our copy of the auction
-    Date lossTimeout;                     ///< When we send a loss if
-    std::vector<GroupPotentialBidders> potentialGroups; ///< One per group
-};
-
-
 /*****************************************************************************/
 /* AUGMENTATION LOOP                                                         */
 /*****************************************************************************/
@@ -91,7 +74,7 @@ struct AugmentationLoop : public ServiceBase, public MessageLoop {
                      const std::string & name = "augmentationLoop");
     ~AugmentationLoop();
     
-    typedef boost::function<void (const std::shared_ptr<AugmentationInfo> &)>
+    typedef boost::function<void (const std::shared_ptr<AugmentorInterface::AugmentationInfo> &)>
         OnFinished;
 
     void init();
@@ -101,27 +84,17 @@ struct AugmentationLoop : public ServiceBase, public MessageLoop {
     void shutdown();
     size_t numAugmenting() const;
 
-    void bindAugmentors(const std::string & uri);
-
     /** Push an auction into the augmentor.  Can be called from any thread. */
-    void augment(const std::shared_ptr<AugmentationInfo> & info,
+    void augment(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info,
                  Date timeout,
                  const OnFinished & onFinished);
 
 private:
 
-    struct Entry {
-        std::shared_ptr<AugmentationInfo> info;
-        std::set<std::string> outstanding;
-        std::map<std::string, std::set<std::string> > augmentorAgents;
-        OnFinished onFinished;
-        Date timeout;
-    };
-
     /** List of auctions we're currently augmenting.  Once the augmentation
         process is finished the auction will be passed on.
     */
-    typedef TimeoutMap<Id, std::shared_ptr<Entry> > Augmenting;
+    typedef TimeoutMap<Id, std::shared_ptr<AugmentorInterface::Entry> > Augmenting;
     Augmenting augmenting;
 
     /** Currently configured augmentors.  Indexed by the augmentor name. */
@@ -147,7 +120,7 @@ private:
     int idle_;
 
     /// We pick up augmentations to be done from here
-    TypedMessageSink<std::shared_ptr<Entry> > inbox;
+    TypedMessageSink<std::shared_ptr<AugmentorInterface::Entry> > inbox;
     TypedMessageSink<std::string> disconnections;
 
     /// Connection to all of our augmentors
@@ -160,7 +133,7 @@ private:
     void handleAugmentorMessage(const std::vector<std::string> & message);
 
     AugmentorInstanceInfo* pickInstance(AugmentorInfo& aug);
-    void doAugmentation(const std::shared_ptr<Entry> & entry);
+    void doAugmentation(const std::shared_ptr<AugmentorInterface::Entry> & entry);
 
     void recordStats();
 
@@ -178,7 +151,7 @@ private:
     /** Handle a message asking for augmentation. */
     void doAugment(const std::vector<std::string> & message);
 
-    void augmentationExpired(const Id & id, const Entry & entry);
+    void augmentationExpired(const Id & id, const AugmentorInterface::Entry & entry);
 };
 
 } // namespace RTBKIT

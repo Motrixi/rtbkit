@@ -135,7 +135,7 @@ numNonIdle() const
     size_t numInFlight, numAwaitingAugmentation;
     {
         numInFlight = router.inFlight.size();
-        numAwaitingAugmentation = router.augmentationLoop.numAugmenting();
+        numAwaitingAugmentation = router.augmentor->numAugmenting();
     }
 
     cerr << "numInFlight = " << numInFlight << endl;

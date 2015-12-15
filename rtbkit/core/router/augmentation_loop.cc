@@ -95,7 +95,7 @@ init()
             doDisconnection(addr);
         };
 
-    inbox.onEvent = [&] (const std::shared_ptr<Entry>& entry)
+    inbox.onEvent = [&] (const std::shared_ptr<AugmentorInterface::Entry>& entry)
         {
             doAugmentation(entry);
         };
@@ -144,18 +144,6 @@ numAugmenting() const
 
 void
 AugmentationLoop::
-bindAugmentors(const std::string & uri)
-{
-    try {
-        toAugmentors.bind(uri.c_str());
-    } catch (const std::exception & exc) {
-        throw Exception("error while binding augmentation URI %s: %s",
-                        uri.c_str(), exc.what());
-    }
-}
-
-void
-AugmentationLoop::
 handleAugmentorMessage(const std::vector<std::string> & message)
 {
     Date now = Date::now();
@@ -195,7 +183,7 @@ checkExpiries()
     Date now = Date::now();
 
     auto onExpired = [&] (const Id & id,
-                          const std::shared_ptr<Entry> & entry) -> Date
+                          const std::shared_ptr<AugmentorInterface::Entry> & entry) -> Date
         {
             for (auto it = entry->outstanding.begin(),
                      end = entry->outstanding.end();
@@ -256,13 +244,13 @@ updateAllAugmentors()
 
 void
 AugmentationLoop::
-augment(const std::shared_ptr<AugmentationInfo> & info,
+augment(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info,
         Date timeout,
         const OnFinished & onFinished)
 {
     Date now = Date::now();
 
-    auto entry = std::make_shared<Entry>();
+    auto entry = std::make_shared<AugmentorInterface::Entry>();
     entry->onFinished = onFinished;
     entry->info = info;
     entry->timeout = timeout;
@@ -369,7 +357,7 @@ pickInstance(AugmentorInfo& aug)
 
 void
 AugmentationLoop::
-doAugmentation(const std::shared_ptr<Entry> & entry)
+doAugmentation(const std::shared_ptr<AugmentorInterface::Entry> & entry)
 {
     Date now = Date::now();
 
@@ -590,7 +578,7 @@ doResponse(const std::vector<std::string> & message)
 
 void
 AugmentationLoop::
-augmentationExpired(const Id & id, const Entry & entry)
+augmentationExpired(const Id & id, const AugmentorInterface::Entry & entry)
 {
     entry.onFinished(entry.info);
 }                     

@@ -29,6 +29,17 @@ struct AugmentorInterface : public ServiceBase
         std::vector<GroupPotentialBidders> potentialGroups; ///< One per group
     };
 
+    typedef boost::function<void (const std::shared_ptr<AugmentationInfo> &)>
+        OnFinished;
+
+    struct Entry {
+        std::shared_ptr<AugmentationInfo> info;
+        std::set<std::string> outstanding;
+        std::map<std::string, std::set<std::string> > augmentorAgents;
+        OnFinished onFinished;
+        Date timeout;
+    };
+
     AugmentorInterface(ServiceBase & parent,
                     std::string const & serviceName = "augmentorService");
 
@@ -48,12 +59,15 @@ struct AugmentorInterface : public ServiceBase
 
     virtual size_t numAugmenting() const = 0;
 
-    typedef boost::function<void (const std::shared_ptr<AugmentorInterface::AugmentationInfo> &)>
-        OnFinished;
-
     virtual void augment(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info,
                  Date timeout,
-                 const OnFinished & onFinished) = 0; 
+                 const OnFinished & onFinished) = 0;
+
+    // This is an ugly hack to fix the interface
+    // with the old augmentation loop
+    virtual void* getLoop() {return nullptr;}
+
+    virtual void sleepUntilIdle(){return;}
 
     virtual void registerLoopMonitor(LoopMonitor *monitor) const { }
     //
