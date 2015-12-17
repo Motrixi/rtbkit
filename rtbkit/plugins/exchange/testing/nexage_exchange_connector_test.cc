@@ -14,6 +14,7 @@
 #include "rtbkit/common/testing/exchange_source.h"
 #include "rtbkit/plugins/exchange/nexage_exchange_connector.h"
 #include "rtbkit/plugins/exchange/http_auction_handler.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include "rtbkit/core/router/router.h"
 #include "rtbkit/core/agent_configuration/agent_configuration_service.h"
 #include "rtbkit/core/banker/null_banker.h"
@@ -64,7 +65,9 @@ BOOST_AUTO_TEST_CASE( test_nexage )
     // Set a null banker that blindly approves all bids so that we can
     // bid.
     router.setBanker(std::make_shared<NullBanker>(true));
-
+    router.setAugmentorLoop(std::make_shared<ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
     // Start the router up
     router.bindTcp();
     router.start();

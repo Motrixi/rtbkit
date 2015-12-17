@@ -10,6 +10,7 @@
 
 #include "rtbkit/plugins/exchange/rtbkit_exchange_connector.h"
 #include "rtbkit/core/router/router.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include "rtbkit/plugins/bid_request/openrtb_bid_source.h"
 #include "rtbkit/openrtb/openrtb_parsing.h"
 
@@ -36,7 +37,9 @@ struct TestContext {
         router.reset(new Router(proxies, "router"));
         router->unsafeDisableMonitor();
         router->init();
-
+        router->setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
         router->bindTcp();
         router->start();
 

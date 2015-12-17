@@ -140,6 +140,8 @@ struct Router : public ServiceBase,
     std::shared_ptr<Banker> getBanker() const;
     void setBanker(const std::shared_ptr<Banker> & newBanker);
 
+    void setAugmentorLoop(const std::shared_ptr<AugmentorInterface> & newAug);
+
     /** Initialize the bidder interface. */
     void initBidderInterface(Json::Value const & json);
 

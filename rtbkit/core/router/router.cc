@@ -288,7 +288,7 @@ init()
 
     loopMonitor.init();
 
-    if(augmentor->getLoop()){
+    if(augmentor.get() && augmentor->getLoop()){
         // Ugly hack to access the old augmentation loop using
         // the augmentor interface
         loopMonitor.addMessageLoop("augmentationLoop",
@@ -334,6 +334,12 @@ setBanker(const std::shared_ptr<Banker> & newBanker)
 {
     banker = newBanker;
     monitorProviderClient.addProvider(banker.get());
+}
+
+void
+Router::
+setAugmentorLoop(const std::shared_ptr<AugmentorInterface> & newAug){
+    augmentor = newAug;
 }
 
 void

@@ -8,6 +8,7 @@
 #include "rtbkit/core/router/router.h"
 #include "rtbkit/core/agent_configuration/agent_configuration_service.h"
 #include "rtbkit/core/banker/null_banker.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include "rtbkit/common/bidder_interface.h"
 #include "rtbkit/common/testing/exchange_source.h"
 #include "rtbkit/testing/test_agent.h"
@@ -79,6 +80,10 @@ struct BidStack {
         if(!services.banker) {
             services.banker.reset(new NullBanker(true));
         }
+        services.router->setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
+
 
         services.router->setBanker(services.banker);
         // Start the router up

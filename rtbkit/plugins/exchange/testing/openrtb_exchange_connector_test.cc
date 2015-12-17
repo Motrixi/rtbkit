@@ -11,6 +11,7 @@
 
 #include "rtbkit/common/testing/exchange_source.h"
 #include "rtbkit/plugins/exchange/openrtb_exchange_connector.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include "rtbkit/core/router/router.h"
 
 
@@ -25,6 +26,10 @@ BOOST_AUTO_TEST_CASE( test_openrtb_error_codes )
     Router router(proxies, "router");
     router.unsafeDisableMonitor();  // Don't require a monitor service
     router.init();
+
+    router.setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
 
     // Start the router up
     router.bindTcp();

@@ -29,6 +29,7 @@
 #include "rtbkit/plugins/adserver/mock_win_source.h"
 #include "rtbkit/plugins/adserver/mock_event_source.h"
 #include "rtbkit/plugins/bid_request/mock_bid_source.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include <boost/thread.hpp>
 #include <netdb.h>
 #include <memory>
@@ -294,11 +295,17 @@ struct Components
         // while ensuring that all the real-time constraints are respected.
         router1.init();
         router1.setBanker(makeSlaveBanker("router1"));
+        router1.setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
         router1.bindTcp();
         router1.start();
 
         router2.init();
         router2.setBanker(makeSlaveBanker("router2"));
+        router2.setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
         router2.bindTcp();
         router2.start();
 

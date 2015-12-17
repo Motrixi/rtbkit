@@ -10,6 +10,7 @@
 
 #include "rtbkit/plugins/exchange/http_exchange_connector.h"
 #include "rtbkit/plugins/exchange/http_auction_handler.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 #include "rtbkit/openrtb/openrtb_parsing.h"
 #include "jml/utils/filter_streams.h"
 #include "rtbkit/core/router/router.h"
@@ -58,6 +59,9 @@ run()
         router.unsafeDisableMonitor();  // Don't require a monitor service
         router.unsafeDisableAuctionProbability(); // Disable auction prob to avoid dropping BR
         router.init();
+        router.setAugmentorLoop(std::make_shared<RTBKIT::ZMQAugmentorInterface>(
+                            "augmentorService",
+                            proxies));
 
         // Start the router up
         router.bindTcp();
