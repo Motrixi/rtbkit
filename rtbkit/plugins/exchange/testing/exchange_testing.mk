@@ -8,7 +8,7 @@ $(eval $(call test,bidswitch_exchange_connector_test,bidswitch_exchange bid_test
 $(eval $(call test,bidswitch_exchange_connector_adx_test,bidswitch_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder,boost))
 $(eval $(call test,bidswitch_filters_test,static_filters bidswitch_exchange,boost))
 $(eval $(call test,nexage_exchange_connector_test,nexage_exchange bid_test_utils openrtb_bid_request bidding_agent rtb_router zmq_augmentor agents_bidder,boost))
-$(eval $(call test,adx_exchange_connector_test,adx_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder adx_utils,boost))
+$(eval $(call test,adx_exchange_connector_test,adx_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder ,boost))
 $(eval $(call test,openrtb_exchange_connector_test,openrtb_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder,boost))
 $(eval $(call test,rtbkit_exchange_connector_test,rtbkit_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder,boost))
 $(eval $(call test,casale_exchange_connector_test,casale_exchange bid_test_utils bidding_agent rtb_router zmq_augmentor agents_bidder,boost))
