@@ -82,6 +82,14 @@ struct HttpAugmentorInterface : public AugmentorInterface
 
 private:
 
+    void processOKResponse(const std::string & headers,
+                std::string &body,
+                const std::string & aid,
+                std::string & augmentor,
+                const std::string & name,
+                std::string & augmentation,
+                AugmentationList & augmentationList);
+
     /** List of auctions we're currently augmenting.  Once the augmentation
         process is finished the auction will be passed on.
     */
