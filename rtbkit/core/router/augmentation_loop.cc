@@ -64,8 +64,6 @@ void
 AugmentationLoop::
 init()
 {
-    registerServiceProvider(serviceName(), { "rtbRouterAugmentation" });
-
     toAugmentors.init(getServices()->config, serviceName() + "/augmentors");
 
     toAugmentors.clientMessageHandler

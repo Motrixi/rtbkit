@@ -15,6 +15,7 @@ ZMQAugmentorInterface::~ZMQAugmentorInterface(){
 }
 
 void ZMQAugmentorInterface::init(Router * r){
+    registerServiceProvider(serviceName(), { "rtbRouterAugmentation" });
     augmentationLoop.init();
 }
 
