@@ -52,7 +52,7 @@ struct AugmentorInterface : public ServiceBase
     void setInterfaceName(const std::string &name);
     std::string interfaceName() const;
 
-    virtual void init(Router * r = nullptr);
+    virtual void init() = 0;
     virtual void shutdown();
 
     virtual void start();

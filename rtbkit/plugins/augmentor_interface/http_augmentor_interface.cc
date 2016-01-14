@@ -137,8 +137,7 @@ HttpAugmentorInterface::~HttpAugmentorInterface()
     shutdown();
 }
 
-void HttpAugmentorInterface::init(Router * r){
-    router = r;
+void HttpAugmentorInterface::init(){
  
     inbox.onEvent = [&] (const std::shared_ptr<Entry>& entry)
         {

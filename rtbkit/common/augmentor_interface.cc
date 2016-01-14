@@ -24,10 +24,6 @@ std::string AugmentorInterface::interfaceName() const {
     return name;
 }
 
-void AugmentorInterface::init(Router * r){
-    router = r;
-}
-
 void AugmentorInterface::start(){
 }
 

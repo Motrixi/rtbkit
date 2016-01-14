@@ -14,7 +14,6 @@ LIB_FILTERS_LINK := \
 $(eval $(call library,static_filters,$(LIB_FILTERS_SOURCES),$(LIB_FILTERS_LINK)))
 
 LIBRTB_ROUTER_SOURCES := \
-	augmentation_loop.cc \
 	router.cc \
 	router_types.cc \
 	router_stack.cc \

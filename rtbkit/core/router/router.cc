@@ -28,6 +28,7 @@
 #include "profiler.h"
 #include "rtbkit/core/banker/banker.h"
 #include "rtbkit/core/banker/null_banker.h"
+#include "rtbkit/plugins/augmentor_interface/augmentation_loop.h"
 #include <boost/algorithm/string.hpp>
 #include "rtbkit/common/bids.h"
 #include "rtbkit/common/auction_events.h"
@@ -225,7 +226,7 @@ initAugmentorInterface(Json::Value const & json)
     std::cerr << "initAugmentorInterface : " << json << std::endl;
     augmentor = AugmentorInterface::create(
             serviceName() + ".augmentor", getServices(), json);
-    augmentor->init(this);
+    augmentor->init();
     augmentor->registerLoopMonitor(&loopMonitor);
 }
 

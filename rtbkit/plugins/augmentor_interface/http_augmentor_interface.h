@@ -63,7 +63,7 @@ struct HttpAugmentorInterface : public AugmentorInterface
  
     ~HttpAugmentorInterface();
 
-    void init(Router * r = nullptr);
+    void init();
     void start();
     void sleepUntilIdle();
     void shutdown();

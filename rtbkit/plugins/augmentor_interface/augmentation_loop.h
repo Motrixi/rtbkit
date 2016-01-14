@@ -13,7 +13,7 @@
 #include "soa/service/timeout_map.h"
 #include "soa/service/zmq_endpoint.h"
 #include "soa/service/typed_message_channel.h"
-#include "router_types.h"
+#include "rtbkit/core/router/router_types.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/thread/thread.hpp>
 #include "soa/service/zmq.hpp"
@@ -68,6 +68,9 @@ struct AugmentorInfo {
 
 struct AugmentationLoop : public ServiceBase, public MessageLoop {
 
+    //this is needed to access the disconnections sink.
+    friend class ZMQAugmentorInterface;
+
     AugmentationLoop(ServiceBase & parent,
                      const std::string & name = "augmentationLoop");
     AugmentationLoop(std::shared_ptr<ServiceProxies> proxies,
@@ -77,7 +80,7 @@ struct AugmentationLoop : public ServiceBase, public MessageLoop {
     typedef boost::function<void (const std::shared_ptr<AugmentorInterface::AugmentationInfo> &)>
         OnFinished;
 
-    void init();
+    void init(AugmentorInterface* aug);
 
     void start();
     void sleepUntilIdle();
@@ -123,8 +126,8 @@ private:
     TypedMessageSink<std::shared_ptr<AugmentorInterface::Entry> > inbox;
     TypedMessageSink<std::string> disconnections;
 
-    /// Connection to all of our augmentors
-    ZmqNamedClientBus toAugmentors;
+    /// Augmentor interface
+    AugmentorInterface* augmentorInterface;
 
     /** Update the augmentors from the configuration settings. */
     void updateAllAugmentors();

@@ -1,12 +1,15 @@
 #pragma once
 
 #include "rtbkit/common/augmentor_interface.h"
-#include "rtbkit/core/router/augmentation_loop.h"
+#include "augmentation_loop.h"
+#include "soa/service/zmq.hpp"
 
 namespace RTBKIT {
 
 struct ZMQAugmentorInterface : public AugmentorInterface
 {
+
+    friend class AugmentationLoop;
 
     ZMQAugmentorInterface(
         std::string serviceName = "augmentorService",
@@ -15,7 +18,7 @@ struct ZMQAugmentorInterface : public AugmentorInterface
  
     ~ZMQAugmentorInterface();
 
-    void init(Router * r = nullptr);
+    void init();
     void start();
     void shutdown();
 
@@ -29,9 +32,14 @@ struct ZMQAugmentorInterface : public AugmentorInterface
 
     virtual void sleepUntilIdle();
 
+    ZmqNamedClientBus& getZmqNamedClientBus();
+
 private :
 
     AugmentationLoop augmentationLoop;
+
+    /// Connection to all of our augmentors
+    ZmqNamedClientBus toAugmentors;
 
 };
 

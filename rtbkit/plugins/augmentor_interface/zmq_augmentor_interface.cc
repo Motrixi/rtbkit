@@ -8,15 +8,41 @@ ZMQAugmentorInterface::ZMQAugmentorInterface(
         std::shared_ptr<ServiceProxies> proxies,
         Json::Value const & json):
             AugmentorInterface(proxies, serviceName),
-            augmentationLoop(proxies, serviceName){
+            augmentationLoop(proxies, serviceName),
+            toAugmentors(getZmqContext()){
 }
  
 ZMQAugmentorInterface::~ZMQAugmentorInterface(){
 }
 
-void ZMQAugmentorInterface::init(Router * r){
+void ZMQAugmentorInterface::init(){
     registerServiceProvider(serviceName(), { "rtbRouterAugmentation" });
-    augmentationLoop.init();
+
+    toAugmentors.init(getServices()->config, serviceName() + "/augmentors");
+
+    toAugmentors.clientMessageHandler
+        = [&] (const std::vector<std::string> & message)
+        {
+            //cerr << "got augmentor message " << message << endl;
+            augmentationLoop.handleAugmentorMessage(message);
+        };
+
+    toAugmentors.bindTcp(getServices()->ports->getRange("augmentors"));
+
+    toAugmentors.onConnection = [=] (const std::string & client)
+        {
+            std::cerr << "augmentor " << client << " has connected" << std::endl;
+        };
+
+    // These events show up on the zookeeper thread so redirect them to our
+    // message loop thread.
+    toAugmentors.onDisconnection = [=] (const std::string & client)
+        {
+            std::cerr << "augmentor " << client << " has disconnected" << std::endl;
+            augmentationLoop.disconnections.push(client);
+        };
+
+    augmentationLoop.init(this);
 }
 
 void ZMQAugmentorInterface::start(){
@@ -25,10 +51,15 @@ void ZMQAugmentorInterface::start(){
 
 void ZMQAugmentorInterface::shutdown(){
     augmentationLoop.shutdown();
+    toAugmentors.shutdown();
 }
 
 void ZMQAugmentorInterface::sleepUntilIdle(){
     augmentationLoop.sleepUntilIdle();
+}
+
+ZmqNamedClientBus& ZMQAugmentorInterface::getZmqNamedClientBus(){
+    return toAugmentors;
 }
 
 size_t ZMQAugmentorInterface::numAugmenting() const{

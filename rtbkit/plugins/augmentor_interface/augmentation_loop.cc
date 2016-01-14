@@ -15,6 +15,7 @@
 #include <iostream>
 #include <boost/make_shared.hpp>
 #include "rtbkit/core/agent_configuration/agent_config.h"
+#include "rtbkit/plugins/augmentor_interface/zmq_augmentor_interface.h"
 
 
 using namespace std;
@@ -36,8 +37,7 @@ AugmentationLoop(ServiceBase & parent,
       allAugmentors(0),
       idle_(1),
       inbox(65536),
-      disconnections(1024),
-      toAugmentors(getZmqContext())
+      disconnections(1024)
 {
     updateAllAugmentors();
 }
@@ -49,8 +49,7 @@ AugmentationLoop(std::shared_ptr<ServiceProxies> proxies,
       allAugmentors(0),
       idle_(1),
       inbox(65536),
-      disconnections(1024),
-      toAugmentors(getZmqContext())
+      disconnections(1024)
 {
     updateAllAugmentors();
 }
@@ -62,31 +61,9 @@ AugmentationLoop::
 
 void
 AugmentationLoop::
-init()
+init(AugmentorInterface* aug)
 {
-    toAugmentors.init(getServices()->config, serviceName() + "/augmentors");
-
-    toAugmentors.clientMessageHandler
-        = [&] (const std::vector<std::string> & message)
-        {
-            //cerr << "got augmentor message " << message << endl;
-            handleAugmentorMessage(message);
-        };
-
-    toAugmentors.bindTcp(getServices()->ports->getRange("augmentors"));
-
-    toAugmentors.onConnection = [=] (const std::string & client)
-        {
-            cerr << "augmentor " << client << " has connected" << endl;
-        };
-
-    // These events show up on the zookeeper thread so redirect them to our
-    // message loop thread.
-    toAugmentors.onDisconnection = [=] (const std::string & client)
-        {
-            cerr << "augmentor " << client << " has disconnected" << endl;
-            disconnections.push(client);
-        };
+    augmentorInterface = aug;
 
     disconnections.onEvent = [&] (const std::string& addr)
         {
@@ -100,7 +77,9 @@ init()
 
     addSource("AugmentationLoop::inbox", inbox);
     addSource("AugmentationLoop::disconnections", disconnections);
-    addSource("AugmentationLoop::toAugmentors", toAugmentors);
+
+    ZMQAugmentorInterface* aug_int = (ZMQAugmentorInterface*)augmentorInterface;
+    addSource("AugmentationLoop::toAugmentors", aug_int->getZmqNamedClientBus());
 
     addPeriodic("AugmentationLoop::checkExpiries", 0.001,
                 [=] (int) { checkExpiries(); });
@@ -113,7 +92,6 @@ void
 AugmentationLoop::
 start()
 {
-    //toAugmentors.start();
     MessageLoop::start();
 }
 
@@ -130,7 +108,6 @@ AugmentationLoop::
 shutdown()
 {
     MessageLoop::shutdown();
-    toAugmentors.shutdown();
 }
 
 size_t
@@ -389,6 +366,7 @@ doAugmentation(const std::shared_ptr<AugmentorInterface::Entry> & entry)
         writer.save(agents);
 
         // Send the message to the augmentor
+        /* FIXME NEMI
         toAugmentors.sendMessage(
                 instance->addr,
                 "AUGMENT", "1.0", *it,
@@ -397,7 +375,7 @@ doAugmentation(const std::shared_ptr<AugmentorInterface::Entry> & entry)
                 entry->info->auction->requestStr,
                 availableAgentsStr.str(),
                 Date::now());
-
+        */
         sentToAugmentor = true;
     }
 
@@ -446,7 +424,9 @@ doConfig(const std::vector<std::string> & message)
 
     updateAllAugmentors();
 
+    /* FIXME NEMI
     toAugmentors.sendMessage(addr, "CONFIGOK");
+    */
 }
 
 
