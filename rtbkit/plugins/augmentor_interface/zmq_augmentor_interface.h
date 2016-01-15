@@ -9,8 +9,6 @@ namespace RTBKIT {
 struct ZMQAugmentorInterface : public AugmentorInterface
 {
 
-    friend class AugmentationLoop;
-
     ZMQAugmentorInterface(
         std::string serviceName = "augmentorService",
         std::shared_ptr<ServiceProxies> proxies = std::make_shared<ServiceProxies>(),
@@ -21,6 +19,11 @@ struct ZMQAugmentorInterface : public AugmentorInterface
     void init();
     void start();
     void shutdown();
+
+    virtual bool sendAugmentMessage(
+                const std::string& augmentor,
+                const std::shared_ptr<AugmentorInterface::Entry> & entry,
+                std::set<std::string> agents);
 
     virtual size_t numAugmenting() const;
 

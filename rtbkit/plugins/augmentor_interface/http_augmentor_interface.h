@@ -74,6 +74,11 @@ struct HttpAugmentorInterface : public AugmentorInterface
                  Date timeout,
                  const OnFinished & onFinished);
 
+    virtual bool sendAugmentMessage(
+                const std::string& augmentor,
+                const std::shared_ptr<AugmentorInterface::Entry> & entry,
+                std::set<std::string> agents);
+
     virtual void registerLoopMonitor(LoopMonitor *monitor) const;
 
     static Logging::Category print;

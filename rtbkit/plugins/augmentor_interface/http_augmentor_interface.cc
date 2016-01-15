@@ -242,89 +242,13 @@ void HttpAugmentorInterface::doAugmentation(const std::shared_ptr<Entry> & entry
 
     bool sentToAugmentor = false;
 
-
     for (auto it = entry->outstanding.begin(), end = entry->outstanding.end();
          it != end;  ++it)
     {
-        auto & aug = *augmentors[*it];
-        const AugmentorInstanceInfo* instance = pickInstance(aug);
-        if (!instance) {
-            recordHit("augmentor.%s.skippedTooManyInFlight", *it);
-            std::cerr << "skippedTooManyInFlight" << std::endl;
-            continue;
-        }
-        recordHit("augmentor.%s.instances.%s.request", *it, instance->path);
-
         std::set<std::string> agents = entry->augmentorAgents[*it];
-        for(auto it = agents.begin(); it != agents.end(); ++it)
-            entry->info->auction->request->ext["agents"].append(*it);
-
-        
-        std::string name = *it;
-        std::string aid = entry->info->auction->id.toString();
-        Date date = Date::now();
-        std::string path = instance->path;
-
-        HttpRequest::Content reqContent {
-                entry->info->auction->request->toJsonStr(), "application/json" };
-
-        RestParams headers { { "X-Openrtb-Version", "2.1" } };
-
-        auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
-            [=, &entry](const HttpRequest &request, HttpClientError errorCode,
-                int statusCode, const std::string && headers, std::string &&body)
-            {
-                recordEvent("augmentation.response");
-                std::string augmentor;
-                std::string augmentation;
-                AugmentationList augmentationList;
-
-                if(errorCode == HttpClientError::None && statusCode == 200){
-                    try{
-                        processOKResponse(headers, body, aid, augmentor, name,
-                                        augmentation, augmentationList);
-                    }catch(...){
-                        augmentor = name;
-                        recordHit("augmentor.%s.exceptionOnResponse", augmentor);
-                    }
-                }else{
-                    augmentor = name;
-                }
-                Id id(aid);
-                auto augmentorIt = augmentors.find(augmentor);
-                if (augmentorIt != augmentors.end()) {
-                    auto instance = augmentorIt->second->findInstance(path);
-                    if (instance) instance->numInFlight--;
-                }
-                auto augmentingIt = augmenting.find(id);
-                if (augmentingIt == augmenting.end()) {
-                    recordHit("augmentation.unknown");
-                    recordHit("augmentor.%s.unknown", augmentor, path);
-                    recordHit("augmentor.%s.instances.%s.unknown", augmentor, path);
-                    return;
-                }
-
-                auto& entry = *augmentingIt;
-
-                const char* eventType =
-                    (augmentation == "" || augmentation == "null") ?
-                    "nullResponse" : "validResponse";
-                recordHit("augmentor.%s.%s", augmentor, eventType);
-                recordHit("augmentor.%s.instances.%s.%s", augmentor, path, eventType);
-
-                auto& auctionAugs = entry.second->info->auction->augmentations;
-                auctionAugs[augmentor].mergeWith(augmentationList);
-
-                entry.second->outstanding.erase(augmentor);
-                if (entry.second->outstanding.empty()) {
-                    entry.second->onFinished(entry.second->info);
-                    augmenting.erase(augmentingIt);
-                }
-            }
-        );
-
-        instance->httpClientAugmentor->post(path, callbacks, reqContent, { }, headers);
-        sentToAugmentor = true;
+        bool success = sendAugmentMessage(*it, entry, agents);
+        if(success)
+            sentToAugmentor = true;
     }
 
     if (sentToAugmentor){
@@ -465,6 +389,92 @@ HttpAugmentorInterface::augmentationExpired(const Id & id, const Entry & entry)
 //
 // factory
 //
+
+bool
+HttpAugmentorInterface::sendAugmentMessage(
+                const std::string& augmentor,
+                const std::shared_ptr<AugmentorInterface::Entry> & entry,
+                std::set<std::string> agents){
+
+    auto & aug = *augmentors[augmentor];
+    const AugmentorInstanceInfo* instance = pickInstance(aug);
+    if (!instance) {
+        recordHit("augmentor.%s.skippedTooManyInFlight", augmentor);
+        std::cerr << "skippedTooManyInFlight" << std::endl;
+        return false;
+    }
+    recordHit("augmentor.%s.instances.%s.request", augmentor, instance->path);
+
+    for(auto it = agents.begin(); it != agents.end(); ++it)
+        entry->info->auction->request->ext["agents"].append(*it);
+
+
+    std::string name = augmentor;
+    std::string aid = entry->info->auction->id.toString();
+    Date date = Date::now();
+    std::string path = instance->path;
+
+    HttpRequest::Content reqContent {
+            entry->info->auction->request->toJsonStr(), "application/json" };
+
+    RestParams headers { { "X-Openrtb-Version", "2.1" } };
+
+    auto callbacks = std::make_shared<HttpClientSimpleCallbacks>(
+        [=, &entry](const HttpRequest &request, HttpClientError errorCode,
+            int statusCode, const std::string && headers, std::string &&body)
+        {
+            recordEvent("augmentation.response");
+            std::string augmentor;
+            std::string augmentation;
+            AugmentationList augmentationList;
+
+            if(errorCode == HttpClientError::None && statusCode == 200){
+                try{
+                    processOKResponse(headers, body, aid, augmentor, name,
+                                    augmentation, augmentationList);
+                }catch(...){
+                    augmentor = name;
+                    recordHit("augmentor.%s.exceptionOnResponse", augmentor);
+                }
+            }else{
+                augmentor = name;
+            }
+            Id id(aid);
+            auto augmentorIt = augmentors.find(augmentor);
+            if (augmentorIt != augmentors.end()) {
+                auto instance = augmentorIt->second->findInstance(path);
+                if (instance) instance->numInFlight--;
+            }
+            auto augmentingIt = augmenting.find(id);
+            if (augmentingIt == augmenting.end()) {
+                recordHit("augmentation.unknown");
+                recordHit("augmentor.%s.unknown", augmentor, path);
+                recordHit("augmentor.%s.instances.%s.unknown", augmentor, path);
+                return;
+            }
+
+            auto& entry = *augmentingIt;
+
+            const char* eventType =
+                (augmentation == "" || augmentation == "null") ?
+                "nullResponse" : "validResponse";
+            recordHit("augmentor.%s.%s", augmentor, eventType);
+            recordHit("augmentor.%s.instances.%s.%s", augmentor, path, eventType);
+
+            auto& auctionAugs = entry.second->info->auction->augmentations;
+            auctionAugs[augmentor].mergeWith(augmentationList);
+
+            entry.second->outstanding.erase(augmentor);
+            if (entry.second->outstanding.empty()) {
+                entry.second->onFinished(entry.second->info);
+                augmenting.erase(augmentingIt);
+            }
+        }
+    );
+
+    instance->httpClientAugmentor->post(path, callbacks, reqContent, { }, headers);
+    return true;
+}
 
 namespace {
 

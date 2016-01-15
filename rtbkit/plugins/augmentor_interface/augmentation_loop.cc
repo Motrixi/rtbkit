@@ -350,33 +350,12 @@ doAugmentation(const std::shared_ptr<AugmentorInterface::Entry> & entry)
     for (auto it = entry->outstanding.begin(), end = entry->outstanding.end();
          it != end;  ++it)
     {
-        auto & aug = *augmentors[*it];
-
-        const AugmentorInstanceInfo* instance = pickInstance(aug);
-        if (!instance) {
-            recordHit("augmentor.%s.skippedTooManyInFlight", *it);
-            continue;
-        }
-        recordHit("augmentor.%s.instances.%s.request", *it, instance->addr);
-
         set<string> agents = entry->augmentorAgents[*it];
-        
-        std::ostringstream availableAgentsStr;
-        ML::DB::Store_Writer writer(availableAgentsStr);
-        writer.save(agents);
-
         // Send the message to the augmentor
-        /* FIXME NEMI
-        toAugmentors.sendMessage(
-                instance->addr,
-                "AUGMENT", "1.0", *it,
-                entry->info->auction->id.toString(),
-                entry->info->auction->requestStrFormat,
-                entry->info->auction->requestStr,
-                availableAgentsStr.str(),
-                Date::now());
-        */
-        sentToAugmentor = true;
+        bool success = augmentorInterface->sendAugmentMessage(*it, entry, agents);
+        if(success){
+            sentToAugmentor = true;
+        }
     }
 
     if (sentToAugmentor)

@@ -73,6 +73,35 @@ void ZMQAugmentorInterface::augment(
     augmentationLoop.augment(info, timeout, onFinished);
 }
 
+bool ZMQAugmentorInterface::sendAugmentMessage(
+                const std::string& augmentor,
+                const std::shared_ptr<AugmentorInterface::Entry> & entry,
+                std::set<std::string> agents){
+
+    auto & aug = *(augmentationLoop.augmentors[augmentor]);
+    const AugmentorInstanceInfo* instance = augmentationLoop.pickInstance(aug);
+    if (!instance) {
+            recordHit("augmentor.%s.skippedTooManyInFlight", augmentor);
+            return false;
+    }
+    recordHit("augmentor.%s.instances.%s.request", augmentor, instance->addr);
+
+    std::ostringstream availableAgentsStr;
+    ML::DB::Store_Writer writer(availableAgentsStr);
+    writer.save(agents);
+
+    toAugmentors.sendMessage(
+            instance->addr,
+            "AUGMENT", "1.0", augmentor,
+            entry->info->auction->id.toString(),
+            entry->info->auction->requestStrFormat,
+            entry->info->auction->requestStr,
+            availableAgentsStr.str(),
+            Date::now());
+
+    return true;
+}
+
 namespace {
 
 struct AtInit {

@@ -8,6 +8,8 @@
 #include "rtbkit/core/router/router_types.h"
 #include "rtbkit/core/post_auction/events.h"
 #include "rtbkit/common/plugin_interface.h"
+#include <set>
+#include <string>
 
 namespace RTBKIT {
 
@@ -62,6 +64,11 @@ struct AugmentorInterface : public ServiceBase
     virtual void augment(const std::shared_ptr<AugmentorInterface::AugmentationInfo> & info,
                  Date timeout,
                  const OnFinished & onFinished) = 0;
+
+    virtual bool sendAugmentMessage(
+                const std::string& augmentor,
+                const std::shared_ptr<AugmentorInterface::Entry> & entry,
+                std::set<std::string> agents) = 0;
 
     // This is an ugly hack to fix the interface
     // with the old augmentation loop
